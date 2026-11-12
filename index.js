@@ -123,6 +123,7 @@ app.get("/events/:id", async (req, res) => {
     }
 
     const { creatorEmail, _id, ...rest } = event;
+    const isOrganizer = req.user?.email === creatorEmail;
 
     // Fetch creator's stats from users collection
     const creator = await db
@@ -155,6 +156,7 @@ app.get("/events/:id", async (req, res) => {
     res.json({
       ...rest,
       id: _id.toString(),
+      isOrganizer,
       joinedUsers,
       creatorOrganizedCount: creator?.organizedCount ?? 0,
       creatorJoinedCount: creator?.joinedCount ?? 0,
