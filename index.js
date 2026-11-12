@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { MongoClient, ObjectId } from "mongodb";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -36,6 +37,43 @@ async function connectDB() {
 }
 
 connectDB();
+
+const clientUrl = process.env.CLIENT_URL;
+if (!clientUrl) {
+  throw new Error("CLIENT_URL is not set");
+}
+
+const JWKS_URL = `${clientUrl}/api/auth/jwks`;
+const jwks = createRemoteJWKSet(new URL(JWKS_URL));
+
+async function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Missing or invalid authorization header" });
+  }
+
+  const token = authHeader.slice(7);
+  try {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: clientUrl,
+      audience: clientUrl,
+    });
+    if (!payload.email || typeof payload.email !== "string") {
+      return res.status(401).json({ message: "Invalid token: missing email" });
+    }
+    req.user = { email: payload.email };
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+}
+
+app.use((err, _req, res, _next) => {
+  console.error("Error:", err);
+  const status = err.status || 500;
+  const message = err.message || "Internal server error";
+  res.status(status).json({ message });
+});
 
 app.get("/", (req, res) => {
   res.json({ message: "CivicHands API is running" });
